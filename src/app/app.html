@@ -1,0 +1,454 @@
+<main class="workspace" [class.dark-mode]="isDarkMode">
+  <div
+    *ngIf="toastMessage"
+    class="app-toast"
+    [class.app-toast-error]="toastType === 'error'"
+    role="status"
+    aria-live="polite">
+    {{ toastMessage }}
+  </div>
+  <aside class="editor" aria-label="Formulário do orçamento">
+    <header class="editor-header">
+      <div class="editor-header-top">
+        <p class="eyebrow">ORÇAMENTO DE SERVIÇOS</p>
+        <button
+          class="dark-mode-toggle"
+          type="button"
+          [attr.aria-pressed]="isDarkMode"
+          (click)="toggleTheme()">
+          {{ isDarkMode ? '☀ Modo claro' : '☾ Modo escuro' }}
+        </button>
+      </div>
+      <h1>Monte seu orçamento</h1>
+      <p>Preencha os dados e gere uma versão pronta para imprimir ou salvar em PDF.</p>
+    </header>
+
+    <form #quoteForm="ngForm" autocomplete="on" (ngSubmit)="submitQuote()">
+      <section class="form-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:15px">
+          <h2 style="margin:0">Sua empresa</h2>
+          <span class="logo-actions">
+            <button class="secondary-action" type="button" [disabled]="isSavingLogo" (click)="logoInput.click()">
+              {{ isSavingLogo ? 'Salvando logo...' : (quote.logoPath ? 'Trocar logo' : 'Inserir logo') }}
+            </button>
+            <span *ngIf="quote.logoPath" class="logo-saved-hint">Logo salva em /logos</span>
+            <input #logoInput class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" (change)="selectLogo($event)">
+          </span>
+        </div>
+        <span *ngIf="logoError" class="save-error" role="alert">{{ logoError }}</span>
+        <div class="form-grid">
+          <label class="wide">
+            Nome da empresa / profissional
+            <input name="companyName" [(ngModel)]="quote.companyName" autocomplete="section-empresa organization">
+          </label>
+          <label>
+            Telefone
+            <input
+              #companyPhone="ngModel"
+              name="companyPhone"
+              [(ngModel)]="quote.companyPhone"
+              (input)="formatPhoneInput($event, 'companyPhone')"
+              type="tel"
+              inputmode="tel"
+              maxlength="16"
+              pattern="\(\d{2}\) \d{4,5}-\d{4}"
+              autocomplete="section-empresa work tel"
+              [attr.aria-invalid]="companyPhone.invalid && companyPhone.touched"
+              [attr.aria-describedby]="companyPhone.invalid && companyPhone.touched ? 'company-phone-error' : null">
+            <span *ngIf="companyPhone.invalid && companyPhone.touched" id="company-phone-error" class="save-error" role="alert">
+              Informe um telefone com DDD e 10 ou 11 dígitos.
+            </span>
+          </label>
+          <label>
+            E-mail
+            <input
+              #companyEmail="ngModel"
+              name="companyEmail"
+              [(ngModel)]="quote.companyEmail"
+              type="email"
+              autocomplete="section-empresa work email"
+              [attr.aria-invalid]="companyEmail.invalid && companyEmail.touched"
+              [attr.aria-describedby]="companyEmail.invalid && companyEmail.touched ? 'company-email-error' : null">
+            <span *ngIf="companyEmail.invalid && companyEmail.touched" id="company-email-error" class="save-error" role="alert">
+              Informe um e-mail válido.
+            </span>
+          </label>
+          <label class="wide">
+            Endereço
+            <input name="companyAddress" [(ngModel)]="quote.companyAddress" autocomplete="section-empresa work street-address">
+          </label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h2>Identificação e cliente</h2>
+        <div class="form-grid">
+          <label>
+            Número do orçamento
+            <input name="number" [(ngModel)]="quote.number" autocomplete="off">
+          </label>
+          <label>
+            Data
+            <input name="date" [(ngModel)]="quote.date" type="date">
+          </label>
+          <label class="wide">
+            <span>Cliente <span class="required-mark">*</span></span>
+            <input name="client" [(ngModel)]="quote.client" required autocomplete="section-cliente name">
+          </label>
+          <label>
+            CPF/CNPJ
+            <input
+              name="taxId"
+              [(ngModel)]="quote.taxId"
+              (ngModelChange)="quote.taxId = formatTaxId($event)"
+              inputmode="numeric"
+              maxlength="18"
+              autocomplete="off">
+          </label>
+          <label>
+            Telefone do cliente
+            <input
+              #clientPhone="ngModel"
+              name="clientPhone"
+              [(ngModel)]="quote.clientPhone"
+              (input)="formatPhoneInput($event, 'clientPhone')"
+              type="tel"
+              inputmode="tel"
+              maxlength="16"
+              pattern="\(\d{2}\) \d{4,5}-\d{4}"
+              autocomplete="section-cliente tel"
+              [attr.aria-invalid]="clientPhone.invalid && clientPhone.touched"
+              [attr.aria-describedby]="clientPhone.invalid && clientPhone.touched ? 'client-phone-error' : null">
+            <span *ngIf="clientPhone.invalid && clientPhone.touched" id="client-phone-error" class="save-error" role="alert">
+              Informe um telefone com DDD e 10 ou 11 dígitos.
+            </span>
+          </label>
+          <label class="wide">
+            E-mail do cliente
+            <input
+              #clientEmail="ngModel"
+              name="clientEmail"
+              [(ngModel)]="quote.clientEmail"
+              type="email"
+              autocomplete="section-cliente email"
+              [attr.aria-invalid]="clientEmail.invalid && clientEmail.touched"
+              [attr.aria-describedby]="clientEmail.invalid && clientEmail.touched ? 'client-email-error' : null">
+            <span *ngIf="clientEmail.invalid && clientEmail.touched" id="client-email-error" class="save-error" role="alert">
+              Informe um e-mail válido.
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h2>Serviços</h2>
+        <p class="section-hint">Adicione ou remova itens conforme necessário. Os subtotais e o total são calculados automaticamente.</p>
+        <div class="service-editor">
+          <div class="service-grid-header" aria-hidden="true">
+            <span></span>
+            <span>Serviço</span>
+            <span>Qtd.</span>
+            <span>Valor unitário</span>
+            <span></span>
+          </div>
+          <div *ngFor="let service of services; let i = index" class="service-fields" [class.service-row-alt]="i % 2 === 1">
+            <span class="service-index">{{ i + 1 }}</span>
+            <label class="service-description">
+              <span class="visually-hidden">Serviço</span>
+              <input [name]="'description-' + i" [(ngModel)]="service.description" autocomplete="off" [attr.aria-label]="'Serviço, linha ' + (i + 1)">
+            </label>
+            <label class="quantity-field">
+              <span class="visually-hidden">Qtd.</span>
+              <input [name]="'quantity-' + i" [(ngModel)]="service.quantity" type="number" min="0" step="1" autocomplete="off" [attr.aria-label]="'Quantidade, linha ' + (i + 1)">
+            </label>
+            <label class="price-field">
+              <span class="visually-hidden">Valor unitário (R$)</span>
+              <input
+                [name]="'service-unit-price-' + i"
+                [value]="service.unitPriceInput"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                [attr.aria-label]="'Valor unitário em reais, linha ' + (i + 1)"
+                (input)="updateServicePrice(service, $event)"
+                (focus)="moveCurrencyCaretToEnd($event)">
+            </label>
+            <button
+              class="remove-service-button"
+              type="button"
+              [attr.aria-label]="'Remover serviço ' + (i + 1)"
+              [disabled]="services.length === 1"
+              (click)="removeService(i)">
+              ×
+            </button>
+          </div>
+        </div>
+        <button
+          class="add-service-button"
+          type="button"
+          style="display:block;width:100%;margin-top:12px;padding:8px 12px;border:1px solid #193b54;border-radius:4px;background:#193b54;color:#fff;cursor:pointer;font:inherit;font-size:12px;font-weight:700"
+          (click)="addService()">+ Adicionar serviço</button>
+        <div class="form-grid financial-fields">
+          <label>
+            <span style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+              <span>Desconto ({{ quote.discountMode === 'percent' ? '%' : 'R$' }})</span>
+              <mat-button-toggle-group
+                class="discount-mode-toggle"
+                name="discountMode"
+                aria-label="Tipo de desconto"
+                hideSingleSelectionIndicator
+                style="--mat-button-toggle-height:20px;--mat-button-toggle-label-text-size:11px;--mat-button-toggle-selected-state-background-color:#f2c94c;--mat-button-toggle-selected-state-text-color:#193b54;flex:0 0 auto;zoom:0.7"
+                [(ngModel)]="quote.discountMode">
+                <mat-button-toggle value="fixed" aria-label="Desconto fixo em reais">R$</mat-button-toggle>
+                <mat-button-toggle value="percent" aria-label="Desconto percentual">%</mat-button-toggle>
+              </mat-button-toggle-group>
+            </span>
+            <span style="position:relative;display:block;width:100%">
+              <input
+                class="money-input"
+                name="discount"
+                [value]="quote.discountInput"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                style="padding-right:32px"
+                (input)="updateDiscount($event)"
+                (focus)="moveCurrencyCaretToEnd($event)">
+              <span
+                aria-hidden="true"
+                style="position:absolute;top:0;right:10px;bottom:0;display:flex;align-items:center;color:#687983;font-size:12px">
+                {{ quote.discountMode === 'percent' ? '%' : 'R$' }}
+              </span>
+            </span>
+          </label>
+          <label>
+            Prazo estimado
+            <select name="estimatedTime" [(ngModel)]="quote.estimatedTime">
+              <option value="">Selecione</option>
+              <option value="1 dia">1 dia</option>
+              <option value="5 dias">5 dias</option>
+              <option value="10 dias">10 dias</option>
+              <option value="15 dias">15 dias</option>
+              <option value="30 dias">30 dias</option>
+              <option value="Manual">Manual</option>
+            </select>
+            <input
+              *ngIf="quote.estimatedTime === 'Manual'"
+              name="manualEstimatedDate"
+              [(ngModel)]="quote.manualEstimatedDate"
+              type="date"
+              lang="pt-BR"
+              aria-label="Data manual estimada para execução">
+          </label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h2>Condições e observações</h2>
+        <div class="form-grid">
+          <fieldset class="payment-field wide">
+            <legend>Forma de pagamento <span class="section-hint">(selecione uma ou mais opções)</span></legend>
+            <div class="payment-options">
+              <label *ngFor="let payment of paymentOptions">
+                <input type="checkbox" [name]="'payment-' + payment.label" [(ngModel)]="payment.selected">
+                <span>{{ payment.label }}</span>
+              </label>
+            </div>
+            <label class="other-payment">
+              Outros
+              <input name="otherPaymentMethod" [(ngModel)]="otherPaymentMethod" placeholder="Informe outra forma de pagamento">
+            </label>
+          </fieldset>
+          <label>
+            Validade (dias)
+            <select name="validityDays" [(ngModel)]="quote.validityDays">
+              <option [ngValue]="null">Selecione</option>
+              <option [ngValue]="1">1 dia</option>
+              <option [ngValue]="5">5 dias</option>
+              <option [ngValue]="10">10 dias</option>
+              <option [ngValue]="15">15 dias</option>
+              <option [ngValue]="30">30 dias</option>
+            </select>
+          </label>
+          <label>
+            Previsão de início
+            <input name="startDate" [(ngModel)]="quote.startDate" type="date">
+          </label>
+          <label>
+            Materiais inclusos?
+            <select name="materialsIncluded" [(ngModel)]="quote.materialsIncluded">
+              <option value="">Selecione</option>
+              <option value="Sim">Sim</option>
+              <option value="Não">Não</option>
+            </select>
+          </label>
+          <label class="wide">
+            Garantia / observações
+            <textarea name="notes" [(ngModel)]="quote.notes" rows="2"></textarea>
+          </label>
+        </div>
+      </section>
+
+      <div class="form-actions">
+        <button class="submit-button" type="submit" [disabled]="isSaving">
+          {{ isSaving ? 'Salvando...' : 'Salvar' }}
+        </button>
+        <button class="print-button saved-quotes-button" type="button" (click)="openSavedQuotes()">Abrir</button>
+        <button class="print-button" type="button" (click)="printQuote()">Imprimir</button>
+      </div>
+      <div *ngIf="isSavedQuotesOpen" class="saved-quotes-overlay" (click)="closeSavedQuotes()">
+        <section
+          class="saved-quotes-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="saved-quotes-title"
+          tabindex="-1"
+          (click)="$event.stopPropagation()"
+          (keydown.escape)="closeSavedQuotes()">
+          <header class="saved-quotes-header">
+            <div>
+              <h2 id="saved-quotes-title">Orçamentos salvos</h2>
+              <p>Selecione um orçamento para carregar no formulário.</p>
+            </div>
+            <button class="saved-quotes-close" type="button" aria-label="Fechar lista" (click)="closeSavedQuotes()">×</button>
+          </header>
+          <p *ngIf="isLoadingQuotes" class="saved-quotes-message">Carregando arquivos...</p>
+          <p *ngIf="savedQuotesError" class="save-error" role="alert">{{ savedQuotesError }}</p>
+          <p *ngIf="!isLoadingQuotes && !savedQuotesError && savedQuotes.length === 0" class="saved-quotes-message">
+            Ainda não há orçamentos salvos na pasta <code>/0- Rascunhos</code>.
+          </p>
+          <div *ngIf="!isLoadingQuotes && savedQuotes.length > 0" class="saved-quotes-list">
+            <button *ngFor="let saved of savedQuotes" class="saved-quote-item" type="button" (click)="openSavedQuote(saved)">
+              <span class="saved-quote-details">
+                <code>{{ saved }}</code>
+              </span>
+              <span class="saved-quote-open">Abrir</span>
+            </button>
+          </div>
+        </section>
+      </div>
+      <div *ngIf="isLoadingSavedQuote" class="quote-loading-overlay" role="status" aria-live="polite">
+        <div class="quote-loading-content">
+          <span class="quote-loading-spinner" aria-hidden="true"></span>
+          <span>Carregando orçamento...</span>
+        </div>
+      </div>
+    </form>
+  </aside>
+
+  <section class="preview-area" aria-label="Prévia para impressão">
+    <div class="preview-toolbar">
+      <span>PRÉVIA DO DOCUMENTO <span class="paper-size">A4 · RETRATO</span></span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="toolbar-print" type="button" (click)="printQuote()">Imprimir</button>
+        <button
+          class="toolbar-print"
+          type="button"
+          style="border-color:#b42318;background:#b42318"
+          [style.opacity]="isSavingPdf ? 0.7 : null"
+          [style.cursor]="isSavingPdf ? 'wait' : 'pointer'"
+          [disabled]="isSavingPdf"
+          (click)="savePdf()">
+          {{ isSavingPdf ? 'Salvando PDF...' : 'Salvar Como PDF' }}
+        </button>
+      </div>
+    </div>
+
+    <article
+      *ngFor="let pageServices of servicePages; let pageIndex = index; let lastPage = last; trackBy: trackPage"
+      class="document"
+      aria-label="Orçamento de serviços">
+      <header class="document-header">
+        <img *ngIf="quote.logoPath" class="quote-logo" [src]="quote.logoPath" [alt]="'Logo de ' + quote.companyName">
+        <div class="company-details">
+          <div class="company-brand">
+            <strong class="company-name">{{ quote.companyName || 'NOME DA EMPRESA / PROFISSIONAL' }}</strong>
+          </div>
+          <p>Telefone: <span class="filled-value">{{ quote.companyPhone }}</span><span class="header-separator"> | </span>E-mail: <span class="filled-value">{{ quote.companyEmail }}</span></p>
+          <p>Endereço: <span class="filled-value">{{ quote.companyAddress }}</span></p>
+        </div>
+        <div class="quote-identification">
+          <strong>ORÇAMENTO</strong>
+          <span>Nº: <span class="filled-value">{{ quote.number }}</span></span>
+          <span>Data: {{ formatDate(quote.date) }}</span>
+        </div>
+      </header>
+
+      <h2 class="document-title">
+        ORÇAMENTO DE SERVIÇOS<span *ngIf="pageIndex > 0"> — CONTINUAÇÃO</span>
+      </h2>
+
+      <section *ngIf="pageIndex === 0" class="client-details" aria-label="Dados do cliente">
+        <div class="client-row shaded-row">
+          <p>Cliente: <span class="filled-value">{{ quote.client }}</span></p>
+          <p>CPF/CNPJ: <span class="filled-value">{{ quote.taxId }}</span></p>
+        </div>
+        <div class="client-row">
+          <p>Telefone: <span class="filled-value">{{ quote.clientPhone }}</span></p>
+          <p>E-mail: <span class="filled-value">{{ quote.clientEmail }}</span></p>
+        </div>
+      </section>
+
+      <section class="document-section services-section">
+        <h3>
+          DESCRIÇÃO DOS SERVIÇOS
+          <span *ngIf="pageIndex > 0" class="continuation-page">CONTINUAÇÃO · PÁGINA {{ pageIndex + 1 }}</span>
+        </h3>
+        <table class="service-table">
+          <colgroup>
+            <col class="description-column">
+            <col class="quantity-column">
+            <col class="unit-column">
+            <col class="subtotal-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Serviço</th>
+              <th>Qtd.</th>
+              <th>Valor unit. (R$)</th>
+              <th>Subtotal (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let service of pageServices; let i = index" [class.shaded-row]="i % 2 === 1">
+              <td>{{ service.description }}</td>
+              <td class="numeric-cell">{{ service.quantity ?? '' }}</td>
+              <td class="numeric-cell">{{ service.unitPrice !== null ? (service.unitPrice | currency:'BRL':'symbol':'1.2-2':'pt-BR') : '' }}</td>
+              <td class="numeric-cell">{{ service.quantity !== null && service.unitPrice !== null ? (lineTotal(service) | currency:'BRL':'symbol':'1.2-2':'pt-BR') : '' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section *ngIf="lastPage" class="financial-summary">
+        <div class="summary-line">
+          <span>Desconto ({{ quote.discountMode === 'percent' ? quote.discountInput + '%' : 'R$' }}): <span class="filled-value">{{ quote.discount !== null ? (discountAmount | currency:'BRL':'symbol':'1.2-2':'pt-BR') : '' }}</span></span>
+          <span class="execution-time">Prazo estimado para execução: <span class="filled-value">{{ quote.estimatedTime === 'Manual' ? formatDate(quote.manualEstimatedDate) : quote.estimatedTime }}</span></span>
+        </div>
+        <div class="total-band">
+          <strong>VALOR TOTAL DO ORÇAMENTO</strong>
+          <strong>{{ hasFinancialValues ? (total | currency:'BRL':'symbol':'1.2-2':'pt-BR') : 'R$ _______________' }}</strong>
+        </div>
+      </section>
+
+      <section *ngIf="lastPage" class="document-section conditions-section">
+        <h3>CONDIÇÕES E OBSERVAÇÕES</h3>
+        <p>Forma de pagamento: <span class="filled-value" [style.color]="paymentMethodsText ? null : '#9aa3a8'">{{ paymentMethodsText || 'A combinar' }}</span></p>
+        <p>Validade deste orçamento: <span class="filled-value short-value">{{ quote.validityDays ?? '' }}</span> dias <span class="condition-divider">|</span> Previsão de início: <span class="filled-value">{{ formatDate(quote.startDate) }}</span></p>
+        <p>Materiais inclusos? ( <span class="choice-value">{{ quote.materialsIncluded === 'Sim' ? 'X' : '' }}</span> ) Sim ( <span class="choice-value">{{ quote.materialsIncluded === 'Não' ? 'X' : '' }}</span> ) Não <span class="condition-divider">|</span> Garantia / observações: <span class="filled-value">{{ quote.notes }}</span></p>
+      </section>
+
+      <footer *ngIf="lastPage" class="signatures">
+        <div class="signature">
+          <span class="signature-line"></span>
+          <span>Assinatura do responsável</span>
+        </div>
+        <div class="signature">
+          <span class="signature-line"></span>
+          <span>Aprovação do cliente</span>
+        </div>
+      </footer>
+      <div *ngIf="hasMultiplePages" class="document-page-number">Pág. {{ pageIndex + 1 }}</div>
+    </article>
+  </section>
+</main>
