@@ -36,14 +36,13 @@ npm run build
 
 ## Criar um executável para Windows
 
-Atualmente, `npm run build` gera somente a versão web em `dist/orcamento-servicos/browser`; ainda não há configuração de empacotamento nem um comando que gere um `.exe`. Para distribuir como aplicativo desktop, é necessário adicionar um invólucro Electron e empacotar juntos a interface compilada, o serviço local `server.cjs` e o runtime do Node.js. O serviço precisa continuar ativo para salvar e abrir rascunhos e PDFs.
+O projeto gera um aplicativo portátil Windows x64 com interface e serviço local empacotados. Para gerar o executável:
 
-Fluxo recomendado para preparar essa distribuição:
+```bash
+npm install
+npm run desktop:build
+```
 
-1. Instale o Node.js 22.22.3 e as dependências do projeto, conforme a seção **Executar**.
-2. Gere e valide a interface com `npm run build`.
-3. Integre Electron ao projeto, criando o processo principal para iniciar e encerrar `server.cjs` junto com a janela do aplicativo. Configure a janela para carregar a interface compilada servida localmente — não abra o `index.html` diretamente como arquivo, pois as chamadas `/api` dependem do serviço local.
-4. Configure o empacotador para incluir `dist/orcamento-servicos/browser`, `server.cjs` e o runtime do Electron/Node. Gere o instalador em Windows com o comando de distribuição configurado pelo empacotador.
-5. Teste o instalador em uma máquina sem ambiente de desenvolvimento: abra o aplicativo, salve um rascunho, gere um PDF e confirme que os arquivos aparecem em `0- Rascunhos` e `1- Orcamentos pdf` ao lado do executável ou em uma pasta de dados configurada.
+O arquivo `Orcamento-Facil-0.0.0-x64.exe` será criado na pasta irmã `Orcamento-Facil-para-enviar`, fora do diretório do código-fonte. Envie esse `.exe` para a pessoa destinatária; não é necessário instalar Node.js. Na primeira execução, o Windows pode exibir um aviso do SmartScreen porque o executável não tem assinatura digital.
 
-O instalador desktop ainda não pode ser gerado apenas seguindo comandos neste repositório: os arquivos de inicialização e a configuração do Electron/empacotador precisam ser implementados primeiro. Enquanto isso, a aplicação pode ser executada no navegador com `npm start`.
+Os dados ficam em pastas ao lado do executável: `0- Rascunhos`, `1- Orcamentos pdf` e `logos`. Mantenha o executável em uma pasta na qual a pessoa tenha permissão para criar arquivos. O botão **Imprimir** continua usando a janela de impressão do sistema; **Salvar Como PDF** grava diretamente na pasta de PDFs.

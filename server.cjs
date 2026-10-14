@@ -4,12 +4,27 @@ const path = require('node:path');
 
 const host = '127.0.0.1';
 const port = 4300;
-const quotesDirectory = path.join(__dirname, '0- Rascunhos');
-const legacyQuotesDirectory = path.join(__dirname, 'orçamentos');
-const pdfDirectory = path.join(__dirname, '1- Orcamentos pdf');
-const logosDirectory = path.join(__dirname, 'logos');
+const dataDirectory = process.env.ORCAMENTO_DATA_DIR || __dirname;
+const applicationDirectory = path.join(__dirname, 'dist', 'orcamento-servicos', 'browser');
+const quotesDirectory = path.join(dataDirectory, '0- Rascunhos');
+const legacyQuotesDirectory = path.join(dataDirectory, 'orçamentos');
+const pdfDirectory = path.join(dataDirectory, '1- Orcamentos pdf');
+const logosDirectory = path.join(dataDirectory, 'logos');
 const maxRequestSize = 8 * 1024 * 1024;
 const maxPdfSize = 32 * 1024 * 1024;
+const contentTypes = {
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.txt': 'text/plain; charset=utf-8',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+};
 
 function sendJson(response, status, payload) {
   response.writeHead(status, {
@@ -119,6 +134,41 @@ async function readPdfBody(request) {
   return Buffer.concat(chunks);
 }
 
+async function serveApplicationFile(request, response, pathname) {
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(pathname);
+  } catch {
+    return sendJson(response, 400, { error: 'Caminho inválido.' });
+  }
+
+  const relativePath = decodedPath === '/' ? 'index.html' : decodedPath.replace(/^\/+/, '');
+  const filePath = path.resolve(applicationDirectory, relativePath);
+  const pathFromRoot = path.relative(applicationDirectory, filePath);
+  if (pathFromRoot.startsWith('..') || path.isAbsolute(pathFromRoot)) {
+    return sendJson(response, 403, { error: 'Acesso negado.' });
+  }
+
+  let contents;
+  try {
+    contents = await fs.readFile(filePath);
+  } catch (error) {
+    if (error.code !== 'ENOENT' || path.extname(relativePath)) {
+      if (error.code === 'ENOENT') return sendJson(response, 404, { error: 'Arquivo não encontrado.' });
+      throw error;
+    }
+    contents = await fs.readFile(path.join(applicationDirectory, 'index.html'));
+  }
+
+  const extension = path.extname(filePath).toLowerCase();
+  response.writeHead(200, {
+    'Content-Type': contentTypes[extension] || 'application/octet-stream',
+    'Cache-Control': extension === '.html' ? 'no-store' : 'public, max-age=31536000, immutable',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  return response.end(request.method === 'HEAD' ? undefined : contents);
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host || `${host}:${port}`}`);
@@ -146,7 +196,7 @@ const server = http.createServer(async (request, response) => {
           suffix += 1;
         }
       }
-      const filePath = path.relative(__dirname, path.join(pdfDirectory, fileName));
+      const filePath = path.relative(dataDirectory, path.join(pdfDirectory, fileName));
       return sendJson(response, 201, { filePath });
     }
     if (request.method === 'GET' && url.pathname === '/api/health') {
@@ -185,6 +235,9 @@ const server = http.createServer(async (request, response) => {
         'X-Content-Type-Options': 'nosniff',
       });
       return response.end(image);
+    }
+    if ((request.method === 'GET' || request.method === 'HEAD') && !url.pathname.startsWith('/api/')) {
+      return await serveApplicationFile(request, response, url.pathname);
     }
     if (request.method !== 'POST' || (url.pathname !== '/api/quotes' && url.pathname !== '/api/logos')) {
       return sendJson(response, 404, { error: 'Rota não encontrada.' });
@@ -251,7 +304,7 @@ const server = http.createServer(async (request, response) => {
 
     savedQuoteNames = [fileName, ...savedQuoteNames.filter((name) => name !== fileName)]
       .sort((left, right) => right.localeCompare(left, 'pt-BR'));
-    const filePath = path.relative(__dirname, path.join(quotesDirectory, fileName));
+    const filePath = path.relative(dataDirectory, path.join(quotesDirectory, fileName));
     return sendJson(response, 201, { filePath });
   } catch (error) {
     console.error('Falha no serviço local de orçamentos.', error);
@@ -267,6 +320,11 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(port, host, () => {
-  console.log(`Serviço local de orçamentos disponível em http://${host}:${port}`);
-});
+if (require.main === module) {
+  server.listen(Number(process.env.PORT) || port, host, () => {
+    const address = server.address();
+    console.log(`Serviço local de orçamentos disponível em http://${host}:${address.port}`);
+  });
+}
+
+module.exports = server;

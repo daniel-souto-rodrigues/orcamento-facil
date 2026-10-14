@@ -1,10 +1,12 @@
 {
   "name": "orcamento-servicos",
   "version": "0.0.0",
+  "main": "electron/main.cjs",
   "scripts": {
     "ng": "ng",
     "start": "concurrently --kill-others -n api,angular \"node server.cjs\" \"ng serve\"",
     "build": "ng build",
+    "desktop:build": "npm run build && electron-builder --win portable --x64 --publish never",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
@@ -31,7 +33,27 @@
     "@angular/cli": "^22.2.2",
     "@angular/compiler-cli": "^22.2.0",
     "concurrently": "^9.2.1",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.0.12",
     "prettier": "^3.8.1",
     "typescript": "~6.0.2"
+  },
+  "build": {
+    "appId": "br.com.orcamentofacil.app",
+    "productName": "Orçamento Fácil",
+    "asar": true,
+    "directories": {
+      "output": "../Orcamento-Facil-para-enviar"
+    },
+    "files": [
+      "dist/orcamento-servicos/browser/**/*",
+      "electron/main.cjs",
+      "server.cjs",
+      "package.json"
+    ],
+    "win": {
+      "target": ["portable"],
+      "artifactName": "Orcamento-Facil-${version}-${arch}.${ext}"
+    }
   }
 }
